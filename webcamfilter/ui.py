@@ -24,8 +24,6 @@ class CvMovieFrame(wx.Frame):
         sizer = wx.BoxSizer(wx.VERTICAL)         
 
         self.capture = cv2.VideoCapture(0) 
-        _, frame = self.capture.read()
-        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -33,7 +31,7 @@ class CvMovieFrame(wx.Frame):
 
         self.SetSize((width + 300, height + 100))
 
-        self.bmp = wx.BitmapFromBuffer(width, height, frame)
+        self.paint_stuff()
         self.displayPanel= wx.StaticBitmap(self, -1, bitmap=self.bmp)
         sizer.Add(self.displayPanel, 0, wx.ALL, 10)
 
@@ -58,14 +56,20 @@ class CvMovieFrame(wx.Frame):
         sizer.Layout()
         self.startTimer()        
 
+    def paint_stuff(self):
+        _, frame = self.capture.read()
+        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        cap = self.capture
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.bmp = wx.BitmapFromBuffer(width, height, frame)
+
     def startTimer(self):
         if self.fps!=0: self.playTimer.Start(1000/self.fps)#every X ms
         else: self.playTimer.Start(1000/15)#assuming 15 fps        
 
     def onRetry(self, event):
-        _, frame = self.capture.read()
-        cv.cvCvtColor(frame, frame, cv.CV_BGR2RGB)
-        self.bmp = wx.BitmapFromBuffer(frame.width, frame.height, frame.imageData)
+        self.paint_stuff()
         self.startTimer()
         self.shotbutton.Show()
         self.retrybutton.Hide()
@@ -76,7 +80,7 @@ class CvMovieFrame(wx.Frame):
     def onShot(self, event):
         _, frame = self.capture.read()
         self.playTimer.Stop()
-        gui.cvSaveImage("foo.png", frame)        
+        gui.imwrite("foo.png", frame)        
 
         self.hasPicture = True
         self.shotbutton.Hide()
@@ -99,12 +103,6 @@ class CvMovieFrame(wx.Frame):
         evt.Skip()
 
     def onNextFrame(self, evt):
-        _, frame = self.capture.read()
-        if frame is not None:
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-            cap = self.capture
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self.bmp = wx.BitmapFromBuffer(width, height, frame)
-            self.Refresh()        
+        self.paint_stuff()
+        self.Refresh()        
         evt.Skip()
