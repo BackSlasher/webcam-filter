@@ -23,11 +23,16 @@ class CvMovieFrame(wx.Frame):
 
         sizer = wx.BoxSizer(wx.VERTICAL)         
 
-        self.capture = cv2.VideoCapture(0) 
+        self.capture = cv2.VideoCapture(2) 
 
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # https://automaticaddison.com/real-time-object-tracking-using-opencv-and-a-webcam/
+        back_sub = cv2.createBackgroundSubtractorMOG2(history=7000,
+            varThreshold=25, detectShadows=True)
+        self.back_sub = back_sub
 
         self.SetSize((width + 300, height + 100))
 
@@ -59,6 +64,9 @@ class CvMovieFrame(wx.Frame):
     def paint_stuff(self):
         _, frame = self.capture.read()
         frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        fg_mask = self.back_sub.apply(frame)
+        # bg = self.back_sub.getBackgroundImage(frame)
+        frame = cv2.bitwise_and(frame, frame, mask=fg_mask)
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
