@@ -1,9 +1,8 @@
 #!/bin/env python3
 
-# Create three boxes:
-# 1. Input from camera
-# 2. Background representation (can be null)
-# 3. Revised output (camera - background)
+# processsor can be in "background learning mode" or "prod mode"
+# If in background learning mode, each frame is treated as background and is used to feed the background detection matrix
+# If in prod mode, negate the bakground frame from each frame and return the result
 
 # https://stackoverflow.com/a/3165474
 import wx
@@ -12,6 +11,11 @@ import cv2 as cv
 import cv2 as gui
 
 from typing import NamedTuple
+from enum import Enum
+
+class CvProcessorMode(Enum):
+    BACKGROUND_LEARNING = 1
+    PROD = 2
 
 class CvProcessorResult(NamedTuple):
     raw_image: wx.BitmapFromBuffer
@@ -28,11 +32,15 @@ class CvProcessor(object):
             varThreshold=25, detectShadows=True)
         self.back_sub = back_sub
 
+        self.set_mode(CvProcessorMode.PROD)
+
+    def set_mode(self, mode: CvProcessorMode) -> None:
+        self.mode = mode
+
     def read(self) -> CvProcessorResult:
         _, frame = self.capture.read()
         frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         fg_mask = self.back_sub.apply(frame)
-        # bg = self.back_sub.getBackgroundImage(frame)
         processed_frame = cv2.bitwise_and(frame, frame, mask=fg_mask)
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -56,6 +64,9 @@ class CvMovieFrame(wx.Frame):
 
         self.processor = CvProcessor()
 
+        self.mode = None
+        self.flipMode()
+
         self.setup_components()
         self.paint_stuff()
 
@@ -78,16 +89,15 @@ class CvMovieFrame(wx.Frame):
         bmp_sizer.Add(self.bmp_processed, 0, wx.ALL, 10)
         sizer.Add(bmp_sizer)
 
-        # Buttons
-        self.shotbutton = wx.Button(self,-1, "Shot")
-        sizer.Add(self.shotbutton,-1, wx.GROW)
-        self.retrybutton = wx.Button(self,-1, "Retry")
-        sizer.Add(self.retrybutton,-1, wx.GROW)     
-        self.retrybutton.Hide()   
+        # My buttons
+        self.btn_background = wx.Button(self,-1, "Background Learning")
+        sizer.Add(self.btn_background,-1, wx.GROW)
+        self.Bind(wx.EVT_BUTTON, self.onModeChange, self.btn_background)
+        self.btn_prod = wx.Button(self,-1, "Prod")
+        sizer.Add(self.btn_prod,-1, wx.GROW)     
+        self.btn_prod.Hide()   
+        self.Bind(wx.EVT_BUTTON, self.onModeChange, self.btn_prod)
 
-        #events
-        self.Bind(wx.EVT_BUTTON, self.onShot, self.shotbutton)
-        self.Bind(wx.EVT_BUTTON, self.onRetry, self.retrybutton)
         self.Bind(wx.EVT_CLOSE, self.onClose)
 
         self.playTimer = wx.Timer(self)
@@ -106,26 +116,6 @@ class CvMovieFrame(wx.Frame):
         if self.fps!=0: self.playTimer.Start(1000/self.fps)#every X ms
         else: self.playTimer.Start(1000/15)#assuming 15 fps        
 
-    def onRetry(self, event):
-        self.paint_stuff()
-        self.startTimer()
-        self.shotbutton.Show()
-        self.retrybutton.Hide()
-        self.hasPicture = False
-        self.Layout()
-        event.Skip()    
-
-    def onShot(self, event):
-        _, frame = self.capture.read()
-        self.playTimer.Stop()
-        gui.imwrite("foo.png", frame)        
-
-        self.hasPicture = True
-        self.shotbutton.Hide()
-        self.retrybutton.Show()
-        self.Layout()
-        event.Skip()
-
     def onClose(self, event):
         try:
             self.playTimer.Stop()
@@ -139,3 +129,21 @@ class CvMovieFrame(wx.Frame):
         self.paint_stuff()
         self.Refresh()        
         evt.Skip()
+
+    def flipMode(self):
+        if self.mode == CvProcessorMode.PROD:
+            self.mode = CvProcessorMode.BACKGROUND_LEARNING
+        else:
+            self.mode = CvProcessorMode.PROD
+        self.processor.set_mode(self.mode)
+
+    def onModeChange(self, event):
+        self.flipMode()
+        if self.mode == CvProcessorMode.PROD:
+            self.btn_prod.Hide()
+            self.btn_background.Show()
+        else:
+            self.btn_prod.Show()
+            self.btn_background.Hide()
+        self.Layout()
+        event.Skip()
