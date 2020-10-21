@@ -1,5 +1,10 @@
 #!/bin/env python3
 
+# Create three boxes:
+# 1. Input from camera
+# 2. Background representation (can be null)
+# 3. Revised output (camera - background)
+
 # https://stackoverflow.com/a/3165474
 import wx
 import cv2
@@ -36,12 +41,24 @@ class CvMovieFrame(wx.Frame):
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.SetSize((width + 300, height + 100))
-        self.displayPanel= wx.StaticBitmap(self, -1, bitmap=self.bmp)
         sizer = wx.BoxSizer(wx.VERTICAL)         
-        sizer.Add(self.displayPanel, 0, wx.ALL, 10)
+
+        ### Bitmaps
+        # bitmap is required for sizes
+        self.displayPanel= wx.StaticBitmap(self, -1, bitmap=self.bmp)
+        bmp_background = wx.StaticBitmap(self, -1, bitmap=self.bmp)
+        bmp_processed = wx.StaticBitmap(self, -1, bitmap=self.bmp)
+
+        bmp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(bmp_sizer)
+        bmp_sizer.Add(self.displayPanel, 0, wx.ALL, 10)
+        bmp_sizer.Add(bmp_background, 0, wx.ALL, 10)
+        bmp_sizer.Add(bmp_processed, 0, wx.ALL, 10)
+        sizer.Add(bmp_sizer)
+
+        # Buttons
         self.shotbutton = wx.Button(self,-1, "Shot")
         sizer.Add(self.shotbutton,-1, wx.GROW)
-
         self.retrybutton = wx.Button(self,-1, "Retry")
         sizer.Add(self.retrybutton,-1, wx.GROW)     
         self.retrybutton.Hide()   
