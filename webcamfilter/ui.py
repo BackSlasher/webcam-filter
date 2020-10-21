@@ -9,6 +9,7 @@ import wx
 import cv2
 import cv2 as cv
 import cv2 as gui
+import numpy as np
 
 from typing import NamedTuple
 from enum import Enum
@@ -24,37 +25,89 @@ class CvProcessorResult(NamedTuple):
 
 class CvProcessor(object):
     def __init__(self):
-        cap = cv2.VideoCapture(2)
+        cap = cv2.VideoCapture(0)
         self.capture = cap
-
-        # https://automaticaddison.com/real-time-object-tracking-using-opencv-and-a-webcam/
-        back_sub = cv2.createBackgroundSubtractorMOG2(history=7000,
-            varThreshold=25, detectShadows=True)
-        self.back_sub = back_sub
 
         self.set_mode(CvProcessorMode.PROD)
 
+        self.avg_background_frame = None
+
     def set_mode(self, mode: CvProcessorMode) -> None:
         self.mode = mode
+        if mode == CvProcessorMode.BACKGROUND_LEARNING:
+            self.avg_background_frame = None
 
-    def read(self) -> CvProcessorResult:
-        _, frame = self.capture.read()
-        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        fg_mask = self.back_sub.apply(frame)
-        processed_frame = cv2.bitwise_and(frame, frame, mask=fg_mask)
+
+    def to_bitmap(self, frame):
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        img_raw = wx.BitmapFromBuffer(width, height, frame)
-        white = cv2.bitwise_not(frame - frame)
-        frame_background = cv2.bitwise_and(white, white, mask = 255-fg_mask)
-        img_background = wx.BitmapFromBuffer(width, height, frame_background)
-        img_processed = wx.BitmapFromBuffer(width, height, processed_frame)
+        return wx.BitmapFromBuffer(width, height, frame)
+
+    def read_learning(self) -> CvProcessorResult:
+        # avg this with the rest of the background frames
+        # return the following:
+        # raw image: raw image
+        # background: avg'd background frame
+        # processed: raw image
+        _, frame = self.capture.read()
+        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+
+        if self.avg_background_frame is None:
+            self.avg_background_frame = frame.astype(np.float64)
+        else:
+            cv.accumulateWeighted(frame, self.avg_background_frame,0.1)
+
+        background = self.avg_background_frame.astype(np.uint8)
+
         return CvProcessorResult(
-            raw_image=img_raw,
-            background=img_background,
-            processed=img_processed,
+            raw_image=self.to_bitmap(frame),
+            background = self.to_bitmap(background),
+            processed=self.to_bitmap(frame),
         )
+
+    def process_image(self, frame, background):
+        import scipy.special
+
+        """
+        mask = frame - background
+        gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        gray_single = gray[0]
+        gray_single[gray_single < 50] = 0
+        gray_single[gray_single > 0] = 255
+        gray_single = gray_single.astype(np.uint8)
+        print(gray_single)
+        processed = cv2.bitwise_and(frame, frame, mask=gray_single)
+        processed = mask
+        """
+        return scipy.special.expit(frame-background)
+        return processed
+
+    def read_prod(self) -> CvProcessorResult:
+        _, frame = self.capture.read()
+        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+
+        background = self.avg_background_frame
+
+        # TODO a lot to be desired
+        if self.avg_background_frame is None:
+            processed = frame
+            background = (frame - frame)
+        else:
+            background = self.avg_background_frame.astype(np.uint8)
+            processed = self.process_image(frame, background)
+
+        return CvProcessorResult(
+            raw_image=self.to_bitmap(frame),
+            background=self.to_bitmap(background),
+            processed=self.to_bitmap(processed),
+        )
+
+    def read(self):
+        if self.mode == CvProcessorMode.BACKGROUND_LEARNING:
+            return self.read_learning()
+        else:
+            return self.read_prod()
 
 
 
