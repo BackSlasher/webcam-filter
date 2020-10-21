@@ -1,9 +1,5 @@
 #!/bin/env python3
 
-# Draw a window
-# Have the ctor take the processor as argument
-# When the processor has a new frame ready, draw it on the window
-
 # https://stackoverflow.com/a/3165474
 import wx
 import cv2
@@ -18,28 +14,31 @@ class CvProcessor(object):
 class CvMovieFrame(wx.Frame):
     TIMER_PLAY_ID = 101
     def __init__(self, parent):        
-
         wx.Frame.__init__(self, parent, -1,)        
 
-        sizer = wx.BoxSizer(wx.VERTICAL)         
+        self.setup_capture()
+        self.paint_stuff()
+        self.setup_components()
 
+        self.fps = 8;
+        self.startTimer()        
+
+    def setup_capture(self):
         self.capture = cv2.VideoCapture(2) 
-
-        cap = self.capture
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
         # https://automaticaddison.com/real-time-object-tracking-using-opencv-and-a-webcam/
         back_sub = cv2.createBackgroundSubtractorMOG2(history=7000,
             varThreshold=25, detectShadows=True)
         self.back_sub = back_sub
 
+    def setup_components(self):
+        cap = self.capture
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.SetSize((width + 300, height + 100))
-
-        self.paint_stuff()
         self.displayPanel= wx.StaticBitmap(self, -1, bitmap=self.bmp)
+        sizer = wx.BoxSizer(wx.VERTICAL)         
         sizer.Add(self.displayPanel, 0, wx.ALL, 10)
-
         self.shotbutton = wx.Button(self,-1, "Shot")
         sizer.Add(self.shotbutton,-1, wx.GROW)
 
@@ -56,10 +55,8 @@ class CvMovieFrame(wx.Frame):
         self.playTimer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.onNextFrame)
 
-        self.fps = 8;
         self.SetSizer(sizer)
         sizer.Layout()
-        self.startTimer()        
 
     def paint_stuff(self):
         _, frame = self.capture.read()
