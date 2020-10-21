@@ -28,9 +28,6 @@ class CvProcessor(object):
             varThreshold=25, detectShadows=True)
         self.back_sub = back_sub
 
-        self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
     def read(self) -> CvProcessorResult:
         _, frame = self.capture.read()
         frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
@@ -41,8 +38,9 @@ class CvProcessor(object):
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         img_raw = wx.BitmapFromBuffer(width, height, frame)
-        # TODO change those
-        img_background = wx.BitmapFromBuffer(width, height, frame)
+        white = cv2.bitwise_not(frame - frame)
+        frame_background = cv2.bitwise_and(white, white, mask = 255-fg_mask)
+        img_background = wx.BitmapFromBuffer(width, height, frame_background)
         img_processed = wx.BitmapFromBuffer(width, height, processed_frame)
         return CvProcessorResult(
             raw_image=img_raw,
