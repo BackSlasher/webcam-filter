@@ -11,49 +11,73 @@ import cv2
 import cv2 as cv
 import cv2 as gui
 
+from typing import NamedTuple
+
+class CvProcessorResult(NamedTuple):
+    raw_image: wx.BitmapFromBuffer
+    background: wx.BitmapFromBuffer
+    processed: wx.BitmapFromBuffer
+
 class CvProcessor(object):
-    def __init__(self, source_path):
-        pass
-
-
-class CvMovieFrame(wx.Frame):
-    TIMER_PLAY_ID = 101
-    def __init__(self, parent):        
-        wx.Frame.__init__(self, parent, -1,)        
-
-        self.setup_capture()
-        self.paint_stuff()
-        self.setup_components()
-
-        self.fps = 8;
-        self.startTimer()        
-
-    def setup_capture(self):
-        self.capture = cv2.VideoCapture(2) 
+    def __init__(self):
+        cap = cv2.VideoCapture(2)
+        self.capture = cap
 
         # https://automaticaddison.com/real-time-object-tracking-using-opencv-and-a-webcam/
         back_sub = cv2.createBackgroundSubtractorMOG2(history=7000,
             varThreshold=25, detectShadows=True)
         self.back_sub = back_sub
 
-    def setup_components(self):
+        self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    def read(self) -> CvProcessorResult:
+        _, frame = self.capture.read()
+        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        fg_mask = self.back_sub.apply(frame)
+        # bg = self.back_sub.getBackgroundImage(frame)
+        processed_frame = cv2.bitwise_and(frame, frame, mask=fg_mask)
         cap = self.capture
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.SetSize((width + 300, height + 100))
+        img_raw = wx.BitmapFromBuffer(width, height, frame)
+        # TODO change those
+        img_background = wx.BitmapFromBuffer(width, height, frame)
+        img_processed = wx.BitmapFromBuffer(width, height, processed_frame)
+        return CvProcessorResult(
+            raw_image=img_raw,
+            background=img_background,
+            processed=img_processed,
+        )
+
+
+
+class CvMovieFrame(wx.Frame):
+    def __init__(self, parent):        
+        wx.Frame.__init__(self, parent, -1,)
+
+        self.processor = CvProcessor()
+
+        self.setup_components()
+        self.paint_stuff()
+
+        self.fps = 8;
+        self.startTimer()        
+
+    def setup_components(self):
         sizer = wx.BoxSizer(wx.VERTICAL)         
 
         ### Bitmaps
         # bitmap is required for sizes
-        self.displayPanel= wx.StaticBitmap(self, -1, bitmap=self.bmp)
-        bmp_background = wx.StaticBitmap(self, -1, bitmap=self.bmp)
-        bmp_processed = wx.StaticBitmap(self, -1, bitmap=self.bmp)
+        self.displayPanel= wx.StaticBitmap(self, -1,)
+        self.bmp_background = wx.StaticBitmap(self, -1,)
+        self.bmp_processed = wx.StaticBitmap(self, -1,)
 
         bmp_sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.Add(bmp_sizer)
         bmp_sizer.Add(self.displayPanel, 0, wx.ALL, 10)
-        bmp_sizer.Add(bmp_background, 0, wx.ALL, 10)
-        bmp_sizer.Add(bmp_processed, 0, wx.ALL, 10)
+        bmp_sizer.Add(self.bmp_background, 0, wx.ALL, 10)
+        bmp_sizer.Add(self.bmp_processed, 0, wx.ALL, 10)
         sizer.Add(bmp_sizer)
 
         # Buttons
@@ -66,7 +90,6 @@ class CvMovieFrame(wx.Frame):
         #events
         self.Bind(wx.EVT_BUTTON, self.onShot, self.shotbutton)
         self.Bind(wx.EVT_BUTTON, self.onRetry, self.retrybutton)
-        self.Bind(wx.EVT_PAINT, self.onPaint)
         self.Bind(wx.EVT_CLOSE, self.onClose)
 
         self.playTimer = wx.Timer(self)
@@ -76,15 +99,10 @@ class CvMovieFrame(wx.Frame):
         sizer.Layout()
 
     def paint_stuff(self):
-        _, frame = self.capture.read()
-        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        fg_mask = self.back_sub.apply(frame)
-        # bg = self.back_sub.getBackgroundImage(frame)
-        frame = cv2.bitwise_and(frame, frame, mask=fg_mask)
-        cap = self.capture
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.bmp = wx.BitmapFromBuffer(width, height, frame)
+        read_result = self.processor.read()
+        self.displayPanel.SetBitmap(read_result.raw_image)
+        self.bmp_background.SetBitmap(read_result.background)
+        self.bmp_processed.SetBitmap(read_result.processed)
 
     def startTimer(self):
         if self.fps!=0: self.playTimer.Start(1000/self.fps)#every X ms
@@ -118,11 +136,6 @@ class CvMovieFrame(wx.Frame):
 
         self.Show(False)
         self.Destroy()      
-
-    def onPaint(self, evt):
-        if self.bmp:
-            self.displayPanel.SetBitmap(self.bmp)
-        evt.Skip()
 
     def onNextFrame(self, evt):
         self.paint_stuff()
